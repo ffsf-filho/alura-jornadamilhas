@@ -90,7 +90,7 @@ app.UseCors(options =>
 
 app.UseSwagger();
 
-//app.UseHttpsRedirection();
+app.UseHttpsRedirection();
 
 //Endpoints
 app.AddEndPointOfertas();
