@@ -9,9 +9,11 @@ namespace JornadaMilhas.API.Endpoint;
 
 public static class OfertaViagemExtensions
 {
+    const string chaveCache = "ofertas-viagem";
+
     public static void AddEndPointOfertas(this WebApplication app)
     {
-        app.MapPost("/ofertas-viagem", async ([FromServices] OfertaViagemConverter converter, [FromServices] EntityDAL<OfertaViagem> entityDAL, [FromBody] OfertaViagemRequest ofertaReq) =>
+        app.MapPost("/ofertas-viagem", async ([FromServices] OfertaViagemConverter converter, [FromServices] EntityDAL<OfertaViagem> entityDAL, [FromBody] OfertaViagemRequest ofertaReq, [FromServices]ICacheService cacheService) =>
         {
             OfertaViagem oferta = new();
             try
@@ -19,7 +21,8 @@ public static class OfertaViagemExtensions
                 oferta = converter.RequestToEntity(ofertaReq);
                 if (oferta.EhValido)
                 {
-                   await entityDAL.Adicionar(oferta);
+                    await entityDAL.Adicionar(oferta);
+                    await cacheService.RemoveCachedDataAsync(chaveCache);
                     return Results.Created("Oferta criada com sucesso!", converter.EntityToResponse(oferta));
                 } 
                 throw new Exception("Oferta inválida");
@@ -32,9 +35,21 @@ public static class OfertaViagemExtensions
             
         }).WithTags("Oferta Viagem").WithSummary("Adiciona uma nova oferta de viagem.").WithOpenApi().RequireAuthorization();
 
-        app.MapGet("/ofertas-viagem", async ([FromServices] OfertaViagemConverter converter, [FromServices] EntityDAL<OfertaViagem> entityDAL) =>
-        {        
-            return  Results.Ok(converter.EntityListToResponseList(await entityDAL.Listar()));
+        app.MapGet("/ofertas-viagem", async ([FromServices] OfertaViagemConverter converter, [FromServices] EntityDAL<OfertaViagem> entityDAL, [FromServices] ICacheService cacheService) =>
+        {
+            var ofertasViagensCache = await cacheService.GetCachedDataAsync<IEnumerable<OfertaViagemResponse>>(chaveCache);
+            
+            if(ofertasViagensCache != null)
+            {
+                return Results.Ok(ofertasViagensCache);
+            }
+
+            var ofertasViagens = converter.EntityListToResponseList(await entityDAL.Listar());
+
+            await cacheService.SetCachedDataAsync(chaveCache, ofertasViagens, TimeSpan.FromMinutes(5));
+            
+            return  Results.Ok(ofertasViagens);
+
         }).WithTags("Oferta Viagem").WithSummary("Listagem de ofertas de viagem cadastrados.").WithOpenApi().RequireAuthorization();
 
         app.MapGet("/ofertas-viagem/{id}", ([FromServices] OfertaViagemConverter converter, [FromServices] EntityDAL<OfertaViagem> entityDAL,int id) =>
